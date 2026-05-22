@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id              String     @id @default(cuid())
+  name            String
+  phone           String
+  email           String     @unique
+  isVip           Boolean    @default(false)
+  paypalCaptureId String?
+  createdAt       DateTime   @default(now())
+  shipments       Shipment[]
+}
+
+model Vehicle {
+  id              String        @id @default(cuid())
+  label           String        @unique
+  status          VehicleStatus @default(idle)
+  currentLat      Float
+  currentLng      Float
+  speedKph        Float         @default(0)
+  routePolyline   String?
+  routeProgress   Float         @default(0)
+  updatedAt       DateTime      @updatedAt
+  shipments       Shipment[]
+}
+
+model Shipment {
+  id             String         @id @default(cuid())
+  customerId     String
+  vehicleId      String?
+  originLat      Float
+  originLng      Float
+  destLat        Float
+  destLng        Float
+  status         ShipmentStatus @default(created)
+  createdAt      DateTime       @default(now())
+  slaDeadline    DateTime
+  currentEta     DateTime?
+  riskScore      Float          @default(0)
+  anomalyScore   Float          @default(0)
+  refundStatus   RefundStatus   @default(none)
+  declaredValue  Float          @default(100)
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  vehicle        Vehicle?       @relation(fields: [vehicleId], references: [id])
+  incidents      Incident[]
+  decisions      Decision[]
+  payments       Payment[]
+}
+
+model Incident {
+  id          String           @id @default(cuid())
+  shipmentId  String
+  type        IncidentType
+  severity    IncidentSeverity
+  detectedAt  DateTime         @default(now())
+  resolvedAt  DateTime?
+  shipment    Shipment         @relation(fields: [shipmentId], references: [id])
+}
+
+// Append-only audit log — never updated or deleted after insert.
+model Decision {
+  id              String   @id @default(cuid())
+  shipmentId      String
+  createdAt       DateTime @default(now())
+  trigger         String
+  inputsSnapshot  Json
+  ruleId          String
+  actionsTaken    Json
+  apiResults      Json
+  dryRun          Boolean  @default(true)
+  shipment        Shipment @relation(fields: [shipmentId], references: [id])
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  shipmentId       String
+  kind             PaymentKind
+  amount           Float
+  currency         String        @default("USD")
+  idempotencyKey   String        @unique
+  providerTxnId    String?
+  status           PaymentStatus @default(pending)
+  failureReason    String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  shipment         Shipment      @relation(fields: [shipmentId], references: [id])
+}
+
+// ── Enums ──────────────────────────────────────────────────────────
+
+enum VehicleStatus {
+  idle
+  enroute
+  stopped
+}
+
+enum ShipmentStatus {
+  created
+  enroute
+  delivered
+  failed
+}
+
+enum IncidentType {
+  traffic
+  delay
+  lost
+}
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum RefundStatus {
+  none
+  pending
+  pending_approval
+  approved
+  rejected
+  issued
+  failed
+}
+
+enum PaymentKind {
+  payment
+  refund
+}
+
+enum PaymentStatus {
+  pending
+  completed
+  failed
+  skipped
+}
